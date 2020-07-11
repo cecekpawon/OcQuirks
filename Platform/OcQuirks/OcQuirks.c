@@ -106,27 +106,27 @@ QuirksProvideConfig (
   OC_STORAGE_CONTEXT                Storage;
   CHAR8                             *ConfigData;
   UINT32                            ConfigDataSize;
-  
+
   // Load SimpleFileSystem Protocol
   Status = gBS->HandleProtocol (
     Handle,
     &gEfiLoadedImageProtocolGuid,
     (VOID **) &LoadedImage
     );
-  
+
   if (EFI_ERROR (Status)) {
     return FALSE;
   }
-  
+
   FileSystem = LocateFileSystem (
     LoadedImage->DeviceHandle,
     LoadedImage->FilePath
     );
-  
+
   if (FileSystem == NULL) {
     return FALSE;
   }
-  
+
   // Init OcStorage as it already handles
   // reading Unicode files
   Status = OcStorageInitFromFs (
@@ -135,17 +135,17 @@ QuirksProvideConfig (
     ROOT_PATH,
     NULL
     );
-  
+
   if (EFI_ERROR (Status)) {
     return FALSE;
   }
-  
+
   ConfigData = OcStorageReadFileUnicode (
     &Storage,
     CONFIG_PATH,
     &ConfigDataSize
     );
-  
+
   // If no config data or greater than max size, fail and use defaults
   if (ConfigDataSize == 0 || ConfigDataSize > MAX_DATA_SIZE) {
     if (ConfigData != NULL) {
@@ -154,11 +154,11 @@ QuirksProvideConfig (
 
     return FALSE;
   }
-  
+
   BOOLEAN Success = ParseSerialized (Config, &mConfigInfo, ConfigData, ConfigDataSize);
-  
+
   FreePool(ConfigData);
-  
+
   return Success;
 }
 
@@ -170,13 +170,13 @@ QuirksEntryPoint (
   )
 {
   OC_QUIRKS Config;
-  
+
   OC_QUIRKS_CONSTRUCT (&Config, sizeof (Config));
   QuirksProvideConfig(&Config, Handle);
-    
+
   OC_ABC_SETTINGS AbcSettings = {
-  
-    .AvoidRuntimeDefrag	    = Config.AvoidRuntimeDefrag,
+
+    .AvoidRuntimeDefrag     = Config.AvoidRuntimeDefrag,
     .DevirtualiseMmio       = Config.DevirtualiseMmio,
     .DisableSingleUser      = Config.DisableSingleUser,
     .DisableVariableWrite   = Config.DisableVariableWrite,
@@ -194,32 +194,32 @@ QuirksEntryPoint (
     .SignalAppleOS          = Config.SignalAppleOS,
     .SyncRuntimePermissions = Config.SyncRuntimePermissions
   };
-  
+
   if (Config.DevirtualiseMmio && Config.MmioWhitelist.Count > 0) {
     AbcSettings.MmioWhitelist = AllocatePool (
       Config.MmioWhitelist.Count * sizeof (AbcSettings.MmioWhitelist[0])
       );
-    
+
     if (AbcSettings.MmioWhitelist != NULL) {
       UINT32 abcIndex = 0;
       UINT32 configIndex = 0;
-      
+
       for (configIndex = 0; configIndex < Config.MmioWhitelist.Count; configIndex++) {
         if (Config.MmioWhitelist.Values[configIndex]->Enabled) {
           AbcSettings.MmioWhitelist[abcIndex] = Config.MmioWhitelist.Values[configIndex]->Address;
           abcIndex++;
         }
       }
-      
+
       AbcSettings.MmioWhitelistSize = abcIndex;
     } // Else couldn't allocate slots for mmio addresses
   }
-  
+
   if (Config.ProvideConsoleGopEnable) {
-  	OcProvideConsoleGop (TRUE);
+    OcProvideConsoleGop (TRUE);
   }
-  
+
   OC_QUIRKS_DESTRUCT (&Config, sizeof (Config));
-  
+
   return OcAbcInitialize (&AbcSettings);
 }
