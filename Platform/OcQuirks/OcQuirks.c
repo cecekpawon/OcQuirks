@@ -1,4 +1,9 @@
+/**
+**/
+
 #include <Uefi.h>
+
+#include <OpenCore.h>
 
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
@@ -19,11 +24,8 @@
 
 //
 
-#define OCQUIRKS_OC_LAST_VER_SYNCED   L"0.5.9"
-#define OCQUIRKS_CONFIG_PATH          L"OcQuirks.plist"
-#define MAX_DATA_SIZE                 (10000)
-
-EFI_GUID gOcQuirksProtocolGuid = OCQUIRKS_PROTOCOL_GUID;
+#define OCQUIRKS_CONFIG_PATH    L"OcQuirks.plist"
+#define MAX_DATA_SIZE           (10000)
 
 //
 
@@ -245,7 +247,7 @@ OcQuirksEntryPoint (
 
   ASSERT_EFI_ERROR (Status);
 
-  DEBUG ((DEBUG_INFO, "OQ: Installed rev%d w/ OC rev%s\n", OCQUIRKS_PROTOCOL_REVISION, OCQUIRKS_OC_LAST_VER_SYNCED));
+  DEBUG ((DEBUG_INFO, "OQ: Installed rev%d w/ OC rev%a\n", OCQUIRKS_PROTOCOL_REVISION, OPEN_CORE_VERSION));
 
   OC_QUIRKS_CONSTRUCT (&Config, sizeof (Config));
   OcQuirksProvideConfig (&Config, ImageHandle);

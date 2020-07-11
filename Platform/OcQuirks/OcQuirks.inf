@@ -9,7 +9,9 @@
 [Packages]
   MdeModulePkg/MdeModulePkg.dec
   MdePkg/MdePkg.dec
+  OcQuirks/OcQuirks.dec
   OpenCorePkg/OpenCorePkg.dec
+  UefiCpuPkg/UefiCpuPkg.dec
 
 [LibraryClasses]
   DebugLib
@@ -26,8 +28,9 @@
   UefiDriverEntryPoint
 
 [Protocols]
-  gEfiSimpleFileSystemProtocolGuid
   gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gOcQuirksProtocolGuid
 
 [Sources]
   OcQuirks.c
