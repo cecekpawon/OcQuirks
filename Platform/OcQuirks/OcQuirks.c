@@ -1,18 +1,31 @@
-#include <Library/MemoryAllocationLib.h>
-#include <Library/OcStorageLib.h>
-#include <Library/OcSerializeLib.h>
-#include <Library/OcTemplateLib.h>
-#include <Library/OcAfterBootCompatLib.h>
-#include <Library/UefiBootServicesTableLib.h>
-#include <Library/OcConsoleLib.h>
+#include <Uefi.h>
 
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
 
-#define ROOT_PATH   L"EFI\\CLOVER"
-#define CONFIG_PATH L"drivers\\UEFI\\OcQuirks.plist"
+#include <Protocol/OcQuirks.h>
 
-#define MAX_DATA_SIZE 10000
+#include <Library/BaseLib.h>
+#include <Library/DevicePathLib.h>
+#include <Library/MemoryAllocationLib.h>
+#include <Library/UefiBootServicesTableLib.h>
+
+#include <Library/OcAfterBootCompatLib.h>
+#include <Library/OcConsoleLib.h>
+#include <Library/OcDebugLogLib.h>
+#include <Library/OcSerializeLib.h>
+#include <Library/OcStorageLib.h>
+#include <Library/OcTemplateLib.h>
+
+//
+
+#define OCQUIRKS_OC_LAST_VER_SYNCED   L"0.5.9"
+#define OCQUIRKS_CONFIG_PATH          L"OcQuirks.plist"
+#define MAX_DATA_SIZE                 (10000)
+
+EFI_GUID gOcQuirksProtocolGuid = OCQUIRKS_PROTOCOL_GUID;
+
+//
 
 #define OC_MMIO_WL_STRUCT_FIELDS(_, __) \
   _(BOOLEAN   , Enabled , , FALSE , ()) \
@@ -95,7 +108,7 @@ mConfigInfo = {
 
 STATIC
 BOOLEAN
-QuirksProvideConfig (
+OcQuirksProvideConfig (
   OUT OC_QUIRKS *Config,
   IN EFI_HANDLE Handle
   )
@@ -105,7 +118,11 @@ QuirksProvideConfig (
   EFI_SIMPLE_FILE_SYSTEM_PROTOCOL   *FileSystem;
   OC_STORAGE_CONTEXT                Storage;
   CHAR8                             *ConfigData;
+  BOOLEAN                           IsSuccess;
   UINT32                            ConfigDataSize;
+  CHAR16                            *DirectoryName;
+
+  IsSuccess = FALSE;
 
   // Load SimpleFileSystem Protocol
   Status = gBS->HandleProtocol (
@@ -115,7 +132,7 @@ QuirksProvideConfig (
     );
 
   if (EFI_ERROR (Status)) {
-    return FALSE;
+    return IsSuccess;
   }
 
   FileSystem = LocateFileSystem (
@@ -124,95 +141,159 @@ QuirksProvideConfig (
     );
 
   if (FileSystem == NULL) {
-    return FALSE;
+    return IsSuccess;
   }
+
+  // Attempt to get self-directory path
+
+  DebugPrintDevicePath (DEBUG_INFO, "OQ: Self path", LoadedImage->FilePath);
+
+  DirectoryName = ConvertDevicePathToText (LoadedImage->FilePath, TRUE, FALSE);
+
+  if (DirectoryName != NULL) {
+    UINTN   i;
+    UINTN   Len;
+
+    //
+
+    Len = StrLen (DirectoryName);
+
+    for (i = Len; ((i > 0) && (DirectoryName[i] != L'\\')); i--);
+
+    if (i > 0) {
+      DirectoryName[i] = L'\0';
+    } else {
+      DirectoryName[0] = L'\\';
+      DirectoryName[1] = L'\0';
+    }
+  } else {
+    return IsSuccess;
+  }
+
+  DEBUG ((DEBUG_INFO, "OQ: Dir path %s\n", DirectoryName));
 
   // Init OcStorage as it already handles
   // reading Unicode files
   Status = OcStorageInitFromFs (
     &Storage,
     FileSystem,
-    ROOT_PATH,
+    DirectoryName,
     NULL
     );
 
+  FreePool (DirectoryName);
+
   if (EFI_ERROR (Status)) {
-    return FALSE;
+    return IsSuccess;
   }
 
   ConfigData = OcStorageReadFileUnicode (
     &Storage,
-    CONFIG_PATH,
+    OCQUIRKS_CONFIG_PATH,
     &ConfigDataSize
     );
 
   // If no config data or greater than max size, fail and use defaults
-  if (ConfigDataSize == 0 || ConfigDataSize > MAX_DATA_SIZE) {
-    if (ConfigData != NULL) {
-      FreePool(ConfigData);
+  if (ConfigData != NULL) {
+    if ((ConfigDataSize > 0) && (ConfigDataSize <= MAX_DATA_SIZE)) {
+      IsSuccess = ParseSerialized (Config, &mConfigInfo, ConfigData, ConfigDataSize);
     }
-
-    return FALSE;
+    FreePool (ConfigData);
   }
 
-  BOOLEAN Success = ParseSerialized (Config, &mConfigInfo, ConfigData, ConfigDataSize);
-
-  FreePool(ConfigData);
-
-  return Success;
+  return IsSuccess;
 }
 
 EFI_STATUS
 EFIAPI
-QuirksEntryPoint (
-  IN EFI_HANDLE        Handle,
+OcQuirksEntryPoint (
+  IN EFI_HANDLE        ImageHandle,
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
-  OC_QUIRKS Config;
+  EFI_STATUS        Status;
+  EFI_HANDLE        Handle;
+  VOID              *Interface;
+  OC_QUIRKS         Config;
+  OC_ABC_SETTINGS   AbcSettings;
+
+  // OcQuirks protocol lookup
+
+  Status = gBS->LocateProtocol (
+    &gOcQuirksProtocolGuid,
+    NULL,
+    &Interface
+    );
+
+  if (!EFI_ERROR (Status)) {
+    //
+    // In case for whatever reason one tried to reload the driver.
+    //
+    return EFI_ALREADY_STARTED;
+  }
+
+  // Install OcQuirks protocol
+
+  Handle    = NULL;
+  Interface = NULL;
+  Status    = gBS->InstallMultipleProtocolInterfaces (
+    &Handle,
+    &gOcQuirksProtocolGuid,
+    &Interface,
+    NULL
+    );
+
+  ASSERT_EFI_ERROR (Status);
+
+  DEBUG ((DEBUG_INFO, "OQ: Installed rev%d w/ OC rev%s\n", OCQUIRKS_PROTOCOL_REVISION, OCQUIRKS_OC_LAST_VER_SYNCED));
 
   OC_QUIRKS_CONSTRUCT (&Config, sizeof (Config));
-  QuirksProvideConfig(&Config, Handle);
+  OcQuirksProvideConfig (&Config, ImageHandle);
 
-  OC_ABC_SETTINGS AbcSettings = {
+  ZeroMem (&AbcSettings, sizeof (AbcSettings));
 
-    .AvoidRuntimeDefrag     = Config.AvoidRuntimeDefrag,
-    .DevirtualiseMmio       = Config.DevirtualiseMmio,
-    .DisableSingleUser      = Config.DisableSingleUser,
-    .DisableVariableWrite   = Config.DisableVariableWrite,
-    .DiscardHibernateMap    = Config.DiscardHibernateMap,
-    .EnableSafeModeSlide    = Config.EnableSafeModeSlide,
-    .EnableWriteUnprotector = Config.EnableWriteUnprotector,
-    .ForceExitBootServices  = Config.ForceExitBootServices,
-    .ProtectMemoryRegions   = Config.ProtectMemoryRegions,
-    .ProtectSecureBoot      = Config.ProtectSecureBoot,
-    .ProtectUefiServices    = Config.ProtectUefiServices,
-    .ProvideCustomSlide     = Config.ProvideCustomSlide,
-    .ProvideMaxSlide        = Config.ProvideMaxSlide,
-    .RebuildAppleMemoryMap  = Config.RebuildAppleMemoryMap,
-    .SetupVirtualMap        = Config.SetupVirtualMap,
-    .SignalAppleOS          = Config.SignalAppleOS,
-    .SyncRuntimePermissions = Config.SyncRuntimePermissions
-  };
+  AbcSettings.AvoidRuntimeDefrag     = Config.AvoidRuntimeDefrag;
+  AbcSettings.DevirtualiseMmio       = Config.DevirtualiseMmio;
+  AbcSettings.DisableSingleUser      = Config.DisableSingleUser;
+  AbcSettings.DisableVariableWrite   = Config.DisableVariableWrite;
+  AbcSettings.ProtectSecureBoot      = Config.ProtectSecureBoot;
+  AbcSettings.DiscardHibernateMap    = Config.DiscardHibernateMap;
+  AbcSettings.EnableSafeModeSlide    = Config.EnableSafeModeSlide;
+  AbcSettings.EnableWriteUnprotector = Config.EnableWriteUnprotector;
+  AbcSettings.ForceExitBootServices  = Config.ForceExitBootServices;
+  AbcSettings.ProtectMemoryRegions   = Config.ProtectMemoryRegions;
+  AbcSettings.ProvideCustomSlide     = Config.ProvideCustomSlide;
+  AbcSettings.ProvideMaxSlide        = Config.ProvideMaxSlide;
+  AbcSettings.ProtectUefiServices    = Config.ProtectUefiServices;
+  AbcSettings.RebuildAppleMemoryMap  = Config.RebuildAppleMemoryMap;
+  AbcSettings.SetupVirtualMap        = Config.SetupVirtualMap;
+  AbcSettings.SignalAppleOS          = Config.SignalAppleOS;
+  AbcSettings.SyncRuntimePermissions = Config.SyncRuntimePermissions;
 
-  if (Config.DevirtualiseMmio && Config.MmioWhitelist.Count > 0) {
+  if (AbcSettings.DevirtualiseMmio && (Config.MmioWhitelist.Count > 0)) {
     AbcSettings.MmioWhitelist = AllocatePool (
       Config.MmioWhitelist.Count * sizeof (AbcSettings.MmioWhitelist[0])
       );
 
     if (AbcSettings.MmioWhitelist != NULL) {
-      UINT32 abcIndex = 0;
-      UINT32 configIndex = 0;
+      UINT32  Index;
+      UINT32  NextIndex;
 
-      for (configIndex = 0; configIndex < Config.MmioWhitelist.Count; configIndex++) {
-        if (Config.MmioWhitelist.Values[configIndex]->Enabled) {
-          AbcSettings.MmioWhitelist[abcIndex] = Config.MmioWhitelist.Values[configIndex]->Address;
-          abcIndex++;
+      NextIndex = 0;
+      for (Index = 0; Index < Config.MmioWhitelist.Count; ++Index) {
+        if (Config.MmioWhitelist.Values[Index]->Enabled) {
+          AbcSettings.MmioWhitelist[NextIndex] = Config.MmioWhitelist.Values[Index]->Address;
+          ++NextIndex;
         }
       }
-
-      AbcSettings.MmioWhitelistSize = abcIndex;
-    } // Else couldn't allocate slots for mmio addresses
+      AbcSettings.MmioWhitelistSize = NextIndex;
+    } else {
+      DEBUG ((
+        DEBUG_ERROR,
+        "OC: Failed to allocate %u slots for mmio addresses\n",
+        (UINT32) Config.MmioWhitelist.Count
+        ));
+    }
   }
 
   if (Config.ProvideConsoleGopEnable) {

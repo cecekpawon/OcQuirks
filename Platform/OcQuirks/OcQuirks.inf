@@ -4,7 +4,7 @@
   FILE_GUID                      = 43C8CFCA-03C0-4AA8-8BEB-5AF6AB3570A2
   MODULE_TYPE                    = UEFI_DRIVER
   VERSION_STRING                 = 1.0
-  ENTRY_POINT                    = QuirksEntryPoint
+  ENTRY_POINT                    = OcQuirksEntryPoint
 
 [Packages]
   MdeModulePkg/MdeModulePkg.dec
@@ -12,15 +12,15 @@
   OpenCorePkg/OpenCorePkg.dec
 
 [LibraryClasses]
-  MemoryAllocationLib
   DebugLib
+  MemoryAllocationLib
   OcAfterBootCompatLib
   OcBootManagementLib
+  OcConsoleLib
   OcMachoLib
   OcOSInfoLib
-  OcStorageLib
-  OcConsoleLib
   OcSerializeLib
+  OcStorageLib
   OcTemplateLib
   UefiBootServicesTableLib
   UefiDriverEntryPoint
