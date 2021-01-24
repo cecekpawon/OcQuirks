@@ -24,6 +24,7 @@ The parameters listed below can be changed by dropping in OcQuirks.plist into yo
 
 |Quirk|Default Value|Description|
 |---|---|---|
+|AllowRelocationBlock|False|Allows booting macOS through a relocation block.|
 |AvoidRuntimeDefrag|True|Fix UEFI runtime services support on many firmwares.|
 |DevirtualiseMmio|False|Reduce stolen memory footprint from memory map, incompatible with some systems|
 |DisableSingleUser|False|A security option to ignore single user mode arguments.|

@@ -40,6 +40,7 @@
   OC_DECLARE (OC_MMIO_WL_ARRAY)
 
 #define OC_QUIRKS_FIELDS(_, __) \
+  _(BOOLEAN , AllowRelocationBlock    ,   , FALSE ,()) \
   _(BOOLEAN , AvoidRuntimeDefrag      ,   , TRUE  ,()) \
   _(BOOLEAN , DevirtualiseMmio        ,   , FALSE ,()) \
   _(BOOLEAN , DisableSingleUser       ,   , FALSE ,()) \
@@ -81,6 +82,7 @@ mMmioWhitelist = OC_SCHEMA_DICT (NULL, mMmioWhitelistEntry);
 STATIC
 OC_SCHEMA
 mConfigNodes[] = {
+  OC_SCHEMA_BOOLEAN_IN ("AllowRelocationBlock"    , OC_QUIRKS, AllowRelocationBlock),
   OC_SCHEMA_BOOLEAN_IN ("AvoidRuntimeDefrag"      , OC_QUIRKS, AvoidRuntimeDefrag),
   OC_SCHEMA_BOOLEAN_IN ("DevirtualiseMmio"        , OC_QUIRKS, DevirtualiseMmio),
   OC_SCHEMA_BOOLEAN_IN ("DisableSingleUser"       , OC_QUIRKS, DisableSingleUser),
@@ -179,6 +181,8 @@ OcQuirksProvideConfig (
   Status = OcStorageInitFromFs (
     &Storage,
     FileSystem,
+    NULL,
+    NULL,
     DirectoryName,
     NULL
     );
@@ -254,6 +258,7 @@ OcQuirksEntryPoint (
 
   ZeroMem (&AbcSettings, sizeof (AbcSettings));
 
+  AbcSettings.AllowRelocationBlock   = Config.AllowRelocationBlock;
   AbcSettings.AvoidRuntimeDefrag     = Config.AvoidRuntimeDefrag;
   AbcSettings.DevirtualiseMmio       = Config.DevirtualiseMmio;
   AbcSettings.DisableSingleUser      = Config.DisableSingleUser;
