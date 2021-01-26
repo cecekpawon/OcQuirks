@@ -160,6 +160,8 @@ OcQuirksProvideConfig (
 
     //
 
+    UnicodeUefiSlashes (DirectoryName);
+
     Len = StrLen (DirectoryName);
 
     for (i = Len; ((i > 0) && (DirectoryName[i] != L'\\')); i--);
@@ -187,7 +189,9 @@ OcQuirksProvideConfig (
     NULL
     );
 
-  FreePool (DirectoryName);
+  if (DirectoryName != NULL) {
+    FreePool (DirectoryName);
+  }
 
   if (EFI_ERROR (Status)) {
     return IsSuccess;
