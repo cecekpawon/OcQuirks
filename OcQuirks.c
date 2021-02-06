@@ -3,8 +3,6 @@
 
 #include <Uefi.h>
 
-#include <OpenCore.h>
-
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
 
@@ -18,6 +16,7 @@
 #include <Library/OcAfterBootCompatLib.h>
 #include <Library/OcConsoleLib.h>
 #include <Library/OcDebugLogLib.h>
+#include <Library/OcMainLib.h>
 #include <Library/OcSerializeLib.h>
 #include <Library/OcStorageLib.h>
 #include <Library/OcTemplateLib.h>
@@ -206,7 +205,7 @@ OcQuirksProvideConfig (
   // If no config data or greater than max size, fail and use defaults
   if (ConfigData != NULL) {
     if ((ConfigDataSize > 0) && (ConfigDataSize <= MAX_DATA_SIZE)) {
-      IsSuccess = ParseSerialized (Config, &mConfigInfo, ConfigData, ConfigDataSize);
+      IsSuccess = ParseSerialized (Config, &mConfigInfo, ConfigData, ConfigDataSize, NULL);
     }
     FreePool (ConfigData);
   }
