@@ -19,6 +19,7 @@
   OcAfterBootCompatLib
   OcBootManagementLib
   OcConsoleLib
+  OcCpuLib
   OcMachoLib
   OcOSInfoLib
   OcSerializeLib

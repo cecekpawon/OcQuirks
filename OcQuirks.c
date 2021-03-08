@@ -15,6 +15,7 @@
 
 #include <Library/OcAfterBootCompatLib.h>
 #include <Library/OcConsoleLib.h>
+#include <Library/OcCpuLib.h>
 #include <Library/OcDebugLogLib.h>
 #include <Library/OcMainLib.h>
 #include <Library/OcSerializeLib.h>
@@ -40,25 +41,26 @@
 
 #define OC_QUIRKS_FIELDS(_, __) \
   _(BOOLEAN , AllowRelocationBlock    ,   , FALSE ,()) \
-  _(BOOLEAN , AvoidRuntimeDefrag      ,   , TRUE  ,()) \
+  _(BOOLEAN , AvoidRuntimeDefrag      ,   , FALSE ,()) \
   _(BOOLEAN , DevirtualiseMmio        ,   , FALSE ,()) \
   _(BOOLEAN , DisableSingleUser       ,   , FALSE ,()) \
   _(BOOLEAN , DisableVariableWrite    ,   , FALSE ,()) \
   _(BOOLEAN , DiscardHibernateMap     ,   , FALSE ,()) \
-  _(BOOLEAN , EnableSafeModeSlide     ,   , TRUE  ,()) \
-  _(BOOLEAN , EnableWriteUnprotector  ,   , FALSE  ,()) \
-  _(BOOLEAN , ForceExitBootServices   ,   , TRUE  ,()) \
+  _(BOOLEAN , EnableSafeModeSlide     ,   , FALSE ,()) \
+  _(BOOLEAN , EnableWriteUnprotector  ,   , FALSE ,()) \
+  _(BOOLEAN , ForceBooterSignature    ,   , FALSE ,()) \
+  _(BOOLEAN , ForceExitBootServices   ,   , FALSE ,()) \
   _(OC_MMIO_WL_ARRAY , MmioWhitelist  ,   , OC_CONSTR2 (OC_MMIO_WL_ARRAY, _, __) , OC_DESTR (OC_MMIO_WL_ARRAY)) \
   _(BOOLEAN , ProtectMemoryRegions    ,   , FALSE ,()) \
   _(BOOLEAN , ProtectSecureBoot       ,   , FALSE ,()) \
   _(BOOLEAN , ProtectUefiServices     ,   , FALSE ,()) \
-  _(BOOLEAN , ProvideConsoleGopEnable ,   , TRUE  ,()) \
+  _(BOOLEAN , ProvideConsoleGopEnable ,   , FALSE ,()) \
   _(UINT8   , ProvideMaxSlide         ,   , 0     ,()) \
-  _(BOOLEAN , ProvideCustomSlide      ,   , TRUE  ,()) \
-  _(BOOLEAN , RebuildAppleMemoryMap   ,   , TRUE  ,()) \
-  _(BOOLEAN , SetupVirtualMap         ,   , TRUE  ,()) \
+  _(BOOLEAN , ProvideCustomSlide      ,   , FALSE ,()) \
+  _(BOOLEAN , RebuildAppleMemoryMap   ,   , FALSE ,()) \
+  _(BOOLEAN , SetupVirtualMap         ,   , FALSE ,()) \
   _(BOOLEAN , SignalAppleOS           ,   , FALSE ,()) \
-  _(BOOLEAN , SyncRuntimePermissions  ,   , TRUE  ,())
+  _(BOOLEAN , SyncRuntimePermissions  ,   , FALSE ,())
 
   OC_DECLARE (OC_QUIRKS)
 
@@ -89,6 +91,7 @@ mConfigNodes[] = {
   OC_SCHEMA_BOOLEAN_IN ("DiscardHibernateMap"     , OC_QUIRKS, DiscardHibernateMap),
   OC_SCHEMA_BOOLEAN_IN ("EnableSafeModeSlide"     , OC_QUIRKS, EnableSafeModeSlide),
   OC_SCHEMA_BOOLEAN_IN ("EnableWriteUnprotector"  , OC_QUIRKS, EnableWriteUnprotector),
+  OC_SCHEMA_BOOLEAN_IN ("ForceBooterSignature"    , OC_QUIRKS, ForceBooterSignature),
   OC_SCHEMA_BOOLEAN_IN ("ForceExitBootServices"   , OC_QUIRKS, ForceExitBootServices),
   OC_SCHEMA_ARRAY_IN   ("MmioWhitelist"           , OC_QUIRKS, MmioWhitelist, &mMmioWhitelist),
   OC_SCHEMA_BOOLEAN_IN ("ProtectMemoryRegions"    , OC_QUIRKS, ProtectMemoryRegions),
@@ -108,6 +111,10 @@ OC_SCHEMA_INFO
 mConfigInfo = {
   .Dict = {mConfigNodes, ARRAY_SIZE (mConfigNodes)}
 };
+
+STATIC
+OC_CPU_INFO
+mOpenCoreCpuInfo;
 
 STATIC
 BOOLEAN
@@ -261,24 +268,25 @@ OcQuirksEntryPoint (
 
   ZeroMem (&AbcSettings, sizeof (AbcSettings));
 
-  AbcSettings.AllowRelocationBlock   = Config.AllowRelocationBlock;
-  AbcSettings.AvoidRuntimeDefrag     = Config.AvoidRuntimeDefrag;
-  AbcSettings.DevirtualiseMmio       = Config.DevirtualiseMmio;
-  AbcSettings.DisableSingleUser      = Config.DisableSingleUser;
-  AbcSettings.DisableVariableWrite   = Config.DisableVariableWrite;
-  AbcSettings.ProtectSecureBoot      = Config.ProtectSecureBoot;
-  AbcSettings.DiscardHibernateMap    = Config.DiscardHibernateMap;
-  AbcSettings.EnableSafeModeSlide    = Config.EnableSafeModeSlide;
-  AbcSettings.EnableWriteUnprotector = Config.EnableWriteUnprotector;
-  AbcSettings.ForceExitBootServices  = Config.ForceExitBootServices;
-  AbcSettings.ProtectMemoryRegions   = Config.ProtectMemoryRegions;
-  AbcSettings.ProvideCustomSlide     = Config.ProvideCustomSlide;
-  AbcSettings.ProvideMaxSlide        = Config.ProvideMaxSlide;
-  AbcSettings.ProtectUefiServices    = Config.ProtectUefiServices;
-  AbcSettings.RebuildAppleMemoryMap  = Config.RebuildAppleMemoryMap;
-  AbcSettings.SetupVirtualMap        = Config.SetupVirtualMap;
-  AbcSettings.SignalAppleOS          = Config.SignalAppleOS;
-  AbcSettings.SyncRuntimePermissions = Config.SyncRuntimePermissions;
+  AbcSettings.AllowRelocationBlock    = Config.AllowRelocationBlock;
+  AbcSettings.AvoidRuntimeDefrag      = Config.AvoidRuntimeDefrag;
+  AbcSettings.DevirtualiseMmio        = Config.DevirtualiseMmio;
+  AbcSettings.DisableSingleUser       = Config.DisableSingleUser;
+  AbcSettings.DisableVariableWrite    = Config.DisableVariableWrite;
+  AbcSettings.ProtectSecureBoot       = Config.ProtectSecureBoot;
+  AbcSettings.DiscardHibernateMap     = Config.DiscardHibernateMap;
+  AbcSettings.EnableSafeModeSlide     = Config.EnableSafeModeSlide;
+  AbcSettings.EnableWriteUnprotector  = Config.EnableWriteUnprotector;
+  AbcSettings.ForceBooterSignature    = Config.ForceBooterSignature;
+  AbcSettings.ForceExitBootServices   = Config.ForceExitBootServices;
+  AbcSettings.ProtectMemoryRegions    = Config.ProtectMemoryRegions;
+  AbcSettings.ProvideCustomSlide      = Config.ProvideCustomSlide;
+  AbcSettings.ProvideMaxSlide         = Config.ProvideMaxSlide;
+  AbcSettings.ProtectUefiServices     = Config.ProtectUefiServices;
+  AbcSettings.RebuildAppleMemoryMap   = Config.RebuildAppleMemoryMap;
+  AbcSettings.SetupVirtualMap         = Config.SetupVirtualMap;
+  AbcSettings.SignalAppleOS           = Config.SignalAppleOS;
+  AbcSettings.SyncRuntimePermissions  = Config.SyncRuntimePermissions;
 
   if (AbcSettings.DevirtualiseMmio && (Config.MmioWhitelist.Count > 0)) {
     AbcSettings.MmioWhitelist = AllocatePool (
@@ -312,5 +320,7 @@ OcQuirksEntryPoint (
 
   OC_QUIRKS_DESTRUCT (&Config, sizeof (Config));
 
-  return OcAbcInitialize (&AbcSettings);
+  OcCpuScanProcessor (&mOpenCoreCpuInfo);
+
+  return OcAbcInitialize (&AbcSettings, &mOpenCoreCpuInfo);
 }
